@@ -258,7 +258,6 @@ read_config (const char *filename)
     } 
     else                           // when no order was given
     {                              
-      MSG ("no order was given\n");
       task.order = -1;             // task order -1 means just append no matter what
     }
 
@@ -379,7 +378,7 @@ make_command_argv (const char *str)
 static void
 spawn_task (Task *task)
 {
-  if (1) MSG ("spawn program '%s'...\n", task->id);
+  if (0) MSG ("spawn program '%s'...\n", task->id);
 
   if (task->piped && task->pipe_id[0] == '\0')  // task, who are piped, makes pipe file a and b
   {
@@ -442,15 +441,14 @@ spawn_task (Task *task)
       }
     }
 
-    if (sigprocmask(SIG_UNBLOCK, &mask, NULL) == -1)
-      MSG (" ---- \n ");
-
+    if (sigprocmask(SIG_UNBLOCK, &mask, NULL) == -1) // unblock signals before executed.
+      MSG (" sigprocmask \n ");
 
     execvp (argv[0], argv);
     MSG ("failed to execute command '%s': %s\n", task->command, STRERROR);
     exit (-1);
   }
-    MSG ("child start [%s] pid: %d\n", task->id, task->pid);
+  usleep(100000); // for execute child in order, we should wait for a bit.
 }
 
 static void
@@ -496,24 +494,15 @@ terminate_children (int signo)
 {
   Task *task;
 
-  if (1) MSG ("terminated by SIGNAL(%d)\n", signo);
+  if (0) MSG ("terminated by SIGNAL(%d)\n", signo);
 
   running = 0;
 
   for (task = tasks; task != NULL; task = task->next)
     if (task->pid > 0)
     {
-      if (1) MSG ("kill program[%s] pid[%d] by SIGNAL(%d)\n", task->id, task->pid, signo);
-      int res = kill (task->pid, signo);
-      if (res == EINVAL) {
-        MSG ("kill pid[%d] error EINVAL", task->pid);
-      } else if (res == EPERM) {
-        MSG ("kill pid[%d] error EPERM", task->pid);
-      } else if (res == ESRCH) {
-        MSG ("kill pid[%d] error ESRCH", task->pid);
-      } else if (res == 0) {
-        MSG ("no error\n");
-      }
+      if (0) MSG ("kill program[%s] pid[%d] by SIGNAL(%d)\n", task->id, task->pid, signo);
+      kill (task->pid, signo);
     }
 
   exit (1);
@@ -523,8 +512,10 @@ int
 main (int    argc,
     char **argv)
 {
-  //struct sigaction sa;
   int terminated;
+  struct signalfd_siginfo fdsi;
+  ssize_t s;
+  Task *task;
 
   if (argc <= 1)
   {
@@ -539,38 +530,6 @@ main (int    argc,
   }
 
   running = 1;
-  /*
-
-  // SIGCHLD //
-  sigemptyset (&sa.sa_mask);
-  sa.sa_flags = 0;
-  sa.sa_handler = wait_for_children; // handler를 새롭게 세팅함.
-  if (sigaction (SIGCHLD, &sa, NULL))
-  MSG ("failed to register signal handler for SIGINT\n");
-
-  // SIGINT //
-  sigemptyset (&sa.sa_mask);
-  sa.sa_flags = 0;
-  sa.sa_handler = terminate_children;
-  if (sigaction (SIGINT, &sa, NULL))
-  MSG ("failed to register signal handler for SIGINT\n");
-
-  // SIGTERM //
-  sigemptyset (&sa.sa_mask);
-  sa.sa_flags = 0;
-  sa.sa_handler = terminate_children;
-  if (sigaction (SIGTERM, &sa, NULL))
-  MSG ("failed to register signal handler for SIGINT\n");
-
-  spawn_tasks ();
-   */
-
-  //spawn_tasks();
-
-  //sigset_t mask;
-  //int sfd;
-  struct signalfd_siginfo fdsi;
-  ssize_t s;
 
   sigemptyset(&mask);
   sigaddset(&mask, SIGCHLD);
@@ -605,7 +564,6 @@ main (int    argc,
       MSG ("read unexpected signal\n");
     }
 
-    Task *task;
 
     terminated = 1;
     for (task = tasks; task != NULL; task = task->next)
