@@ -17,8 +17,6 @@ static void
 signal_handler (int signo)
 {
   if (!looping) {
-    // TODO: remove here
-    MSG ("I'm looping!!\n");
     return;
   }
 
@@ -87,8 +85,6 @@ main (int    argc,
   MSG ("'%s' start (timeout %d)\n", name, timeout);
 
   looping = 1;
-  // TODO delete here
-  MSG ("looping in %s %d\n", name, looping);
 
   /* Write the message to standard outout. */
   if (msg_stdout)

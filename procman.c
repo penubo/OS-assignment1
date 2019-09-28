@@ -446,11 +446,11 @@ spawn_task (Task *task)
       MSG (" ---- \n ");
 
 
-    MSG ("child start [%s] pid: %d\n", task->id, task->pid);
     execvp (argv[0], argv);
     MSG ("failed to execute command '%s': %s\n", task->command, STRERROR);
     exit (-1);
   }
+    MSG ("child start [%s] pid: %d\n", task->id, task->pid);
 }
 
 static void
