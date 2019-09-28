@@ -17,6 +17,8 @@
 
 #define ID_MIN 2
 #define ID_MAX 8
+#define ORDER_MIN 1
+#define ORDER_MAX 4
 #define COMMAND_LEN 256
 
 typedef enum
@@ -32,13 +34,14 @@ struct _Task
   Task          *next;
 
   volatile pid_t pid;
-  int            piped;     // is this boolean value?? 
-  int            pipe_a[2]; // what is pipe_a and _b
+  int            piped;                 // is this boolean value?? 
+  int            pipe_a[2];             // what is pipe_a and _b
   int            pipe_b[2];
 
   char           id[ID_MAX + 1];
+  unsigned int   order;                 // order of task.
   char           pipe_id[ID_MAX + 1];
-  Action         action; // action: once or respawn
+  Action         action;                // action: once or respawn
   char           command[COMMAND_LEN];
 };
 
@@ -81,6 +84,23 @@ check_valid_id (const char *str)
 
   for (i = 0; i < len; i++)
     if (!(islower (str[i]) || isdigit (str[i])))
+      return -1;
+
+  return 0;
+}
+
+static int
+check_valid_order (const char *str)
+{
+  size_t len;
+  int    i;
+
+  len = strlen (str);
+  if (len < ORDER_MIN || ORDER_MAX < len)
+    return -1;
+
+  for (i = 0; i < len; i++) 
+    if ( !isdigit (str[i]) )
       return -1;
 
   return 0;
@@ -136,7 +156,7 @@ append_task (Task *task)
     }
 }
 
-static int
+  static int
 read_config (const char *filename)
 {
   FILE *fp;
@@ -151,125 +171,145 @@ read_config (const char *filename)
 
   line_nr = 0;
   while (fgets (line, sizeof (line), fp))
-    {
-      Task   task;
-      char  *p;
-      char  *s;
-      size_t len;
+  {
+    Task   task;
+    char  *p;
+    char  *s;
+    size_t len;
 
-      line_nr++;
-      memset (&task, 0x00, sizeof (task));
+    line_nr++;
+    memset (&task, 0x00, sizeof (task));
 
-      len = strlen (line);
-      if (line[len - 1] == '\n')
-        line[len - 1] = '\0';
+    len = strlen (line);
+    if (line[len - 1] == '\n')
+      line[len - 1] = '\0';
 
-      if (0)
-        MSG ("config[%3d] %s\n", line_nr, line);
+    if (0)
+      MSG ("config[%3d] %s\n", line_nr, line);
 
-      strstrip (line);
+    strstrip (line);
 
-      /* comment or empty line */
-      if (line[0] == '#' || line[0] == '\0')
-        continue;
-
-      /* id */
-      s = line;
-      p = strchr (s, ':');
-      if (!p)
-        goto invalid_line;
-      *p = '\0';
-      strstrip (s);
-      if (check_valid_id (s))
-        {
-          MSG ("invalid id '%s' in line %d, ignored\n", s, line_nr);
-          continue;
-        }
-      if (lookup_task (s))
-        {
-          MSG ("duplicate id '%s' in line %d, ignored\n", s, line_nr);
-          continue;
-        }
-      strcpy (task.id, s);
-
-      /* action */
-      s = p + 1;
-      p = strchr (s, ':');
-      if (!p)
-        goto invalid_line;
-      *p = '\0';
-      strstrip (s);
-      if (!strcasecmp (s, "once"))
-        task.action = ACTION_ONCE;
-      else if (!strcasecmp (s, "respawn"))
-        task.action = ACTION_RESPAWN;
-      else
-        {
-          MSG ("invalid action '%s' in line %d, ignored\n", s, line_nr);
-          continue;
-        }
-
-      /* pipe-id */
-      s = p + 1;
-      p = strchr (s, ':');
-      if (!p)
-        goto invalid_line;
-      *p = '\0';
-      strstrip (s);
-      if (s[0] != '\0')
-        {
-          Task *t;
-
-          if (check_valid_id (s))
-            {
-              MSG ("invalid pipe-id '%s' in line %d, ignored\n", s, line_nr);
-              continue;
-            }
-
-          t = lookup_task (s);
-          if (!t)
-            {
-              MSG ("unknown pipe-id '%s' in line %d, ignored\n", s, line_nr);
-              continue;
-            }
-          if (task.action == ACTION_RESPAWN || t->action == ACTION_RESPAWN)
-            {
-              MSG ("pipe not allowed for 'respawn' tasks in line %d, ignored\n", line_nr);
-              continue;
-            }
-          if (t->piped)
-            {
-              MSG ("pipe not allowed for already piped tasks in line %d, ignored\n", line_nr);
-              continue;
-            }
-
-          strcpy (task.pipe_id, s);
-          task.piped = 1;
-          t->piped = 1;
-        }
-
-      /* command */
-      s = p + 1;
-      strstrip (s);
-      if (s[0] == '\0')
-        {
-          MSG ("empty command in line %d, ignored\n", line_nr);
-          continue;
-        }
-      strncpy (task.command, s, sizeof (task.command) - 1);
-      task.command[sizeof (task.command) - 1] = '\0';
-
-      if (0)
-        MSG ("id:%s pipe-id:%s action:%d command:%s\n",
-             task.id, task.pipe_id, task.action, task.command);
-
-      append_task (&task);
+    /* comment or empty line */
+    if (line[0] == '#' || line[0] == '\0')
       continue;
 
-    invalid_line:
-      MSG ("invalid format in line %d, ignored\n", line_nr);
+    /* id */
+    s = line;
+    p = strchr (s, ':');
+    if (!p)
+      goto invalid_line;
+    *p = '\0';
+    strstrip (s);
+    if (check_valid_id (s))
+    {
+      MSG ("invalid id '%s' in line %d, ignored\n", s, line_nr);
+      continue;
     }
-  
+    if (lookup_task (s))
+    {
+      MSG ("duplicate id '%s' in line %d, ignored\n", s, line_nr);
+      continue;
+    }
+    strcpy (task.id, s);
+
+    /* action */
+    s = p + 1;
+    p = strchr (s, ':');
+    if (!p)
+      goto invalid_line;
+    *p = '\0';
+    strstrip (s);
+    if (!strcasecmp (s, "once"))
+      task.action = ACTION_ONCE;
+    else if (!strcasecmp (s, "respawn"))
+      task.action = ACTION_RESPAWN;
+    else
+    {
+      MSG ("invalid action '%s' in line %d, ignored\n", s, line_nr);
+      continue;
+    }
+
+    /* order */
+    s = p + 1;
+    p = strchr (s, ':');
+    if (!p)
+      goto invalid_line;
+    *p = '\0';
+    strstrip (s);
+    if (s[0] != '\0') {
+      if (check_valid_order (s)) {
+        MSG ("invalid order '%s' in line %d, ignored\n", s, line_nr);
+        continue;
+      }
+
+      MSG ("order %s was given in line %d\n", s, line_nr);
+      task.order = atoi(s);
+    } else {
+      MSG ("no order was given\n");
+      task.order = -1;
+    }
+
+    /* pipe-id */
+    s = p + 1;
+    p = strchr (s, ':');
+    if (!p)
+      goto invalid_line;
+    *p = '\0';
+    strstrip (s);
+    if (s[0] != '\0')
+    {
+      Task *t;
+
+      if (check_valid_id (s))
+      {
+        MSG ("invalid pipe-id '%s' in line %d, ignored\n", s, line_nr);
+        continue;
+      }
+
+      t = lookup_task (s);
+      if (!t)
+      {
+        MSG ("unknown pipe-id '%s' in line %d, ignored\n", s, line_nr);
+        continue;
+      }
+      if (task.action == ACTION_RESPAWN || t->action == ACTION_RESPAWN)
+      {
+        MSG ("pipe not allowed for 'respawn' tasks in line %d, ignored\n", line_nr);
+        continue;
+      }
+      if (t->piped)
+      {
+        MSG ("pipe not allowed for already piped tasks in line %d, ignored\n", line_nr);
+        continue;
+      }
+
+      strcpy (task.pipe_id, s);
+      task.piped = 1;
+      t->piped = 1;
+    }
+
+    /* command */
+    s = p + 1;
+    strstrip (s);
+    if (s[0] == '\0')
+    {
+      MSG ("empty command in line %d, ignored\n", line_nr);
+      continue;
+    }
+    strncpy (task.command, s, sizeof (task.command) - 1);
+    task.command[sizeof (task.command) - 1] = '\0';
+
+    if (0)
+      MSG ("id:%s pipe-id:%s action:%d command:%s\n",
+          task.id, task.pipe_id, task.action, task.command);
+
+    append_task (&task);
+    continue;
+
+invalid_line:
+    MSG ("invalid format in line %d, ignored\n", line_nr);
+  }
+
   fclose (fp);
 
   return 0;
@@ -392,8 +432,6 @@ spawn_task (Task *task)
     if (sigprocmask(SIG_UNBLOCK, &mask, NULL) == -1)
       MSG (" ---- \n ");
 
-    close(sfd); 
-
     execvp (argv[0], argv);
     MSG ("failed to execute command '%s': %s\n", task->command, STRERROR);
     exit (-1);
@@ -471,7 +509,7 @@ int
 main (int    argc,
       char **argv)
 {
-  struct sigaction sa;
+  //struct sigaction sa;
   int terminated;
 
   if (argc <= 1)
