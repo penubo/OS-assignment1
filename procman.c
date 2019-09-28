@@ -59,11 +59,11 @@ strstrip (char *str)
 
   len = strlen (str);
   while (len--)
-    {
-      if (!isspace (str[len]))
-        break;
-      str[len] = '\0';
-    }
+  {
+    if (!isspace (str[len]))
+      break;
+    str[len] = '\0';
+  }
 
   for (start = str; *start && isspace (*start); start++)
     ;
@@ -137,10 +137,10 @@ append_task (Task *task)
 
   new_task = malloc (sizeof (Task));
   if (!new_task)
-    {
-      MSG ("failed to allocate a task: %s\n", STRERROR);
-      return;
-    }
+  {
+    MSG ("failed to allocate a task: %s\n", STRERROR);
+    return;
+  }
 
   *new_task = *task;
   new_task->next = NULL;
@@ -148,15 +148,27 @@ append_task (Task *task)
   if (!tasks)
     tasks = new_task;
   else
-    {
-      Task *t;
+  {
+    Task *t = tasks;
 
-      for (t = tasks; t->next != NULL; t = t->next) ;
+    if (new_task->order == -1) {
+      for ( ; t->next != NULL; t = t->next) ;
       t->next = new_task;
+    } else {
+
+      if (t->order > new_task->order) {
+        new_task->next = t;
+        tasks = new_task;
+      } else {
+        while (t->next != NULL && t->next->order < new_task->order) t = t->next;
+        new_task->next = t->next;
+        t->next = new_task;
+      }
     }
+  }
 }
 
-  static int
+static int
 read_config (const char *filename)
 {
   FILE *fp;
@@ -236,17 +248,18 @@ read_config (const char *filename)
       goto invalid_line;
     *p = '\0';
     strstrip (s);
-    if (s[0] != '\0') {
+    if (s[0] != '\0') 
+    {                   // when order was given as an option
       if (check_valid_order (s)) {
         MSG ("invalid order '%s' in line %d, ignored\n", s, line_nr);
         continue;
       }
-
-      MSG ("order %s was given in line %d\n", s, line_nr);
-      task.order = atoi(s);
-    } else {
+      task.order = atoi(s);        // set task order
+    } 
+    else                           // when no order was given
+    {                              
       MSG ("no order was given\n");
-      task.order = -1;
+      task.order = -1;             // task order -1 means just append no matter what
     }
 
     /* pipe-id */
@@ -323,42 +336,42 @@ make_command_argv (const char *str)
   int         n;
 
   for (n = 0, p = str; p != NULL; n++)
-    {
-      char *s;
+  {
+    char *s;
 
-      s = strchr (p, ' ');
-      if (!s)
-        break;
-      p = s + 1;
-    }
+    s = strchr (p, ' ');
+    if (!s)
+      break;
+    p = s + 1;
+  }
   n++;
 
   argv = calloc (sizeof (char *), n + 1);
   if (!argv)
-    {
-      MSG ("failed to allocate a command vector: %s\n", STRERROR);
-      return NULL;
-    }
+  {
+    MSG ("failed to allocate a command vector: %s\n", STRERROR);
+    return NULL;
+  }
 
   for (n = 0, p = str; p != NULL; n++)
-    {
-      char *s;
+  {
+    char *s;
 
-      s = strchr (p, ' ');
-      if (!s)
-        break;
-      argv[n] = strndup (p, s - p);
-      p = s + 1;
-    }
+    s = strchr (p, ' ');
+    if (!s)
+      break;
+    argv[n] = strndup (p, s - p);
+    p = s + 1;
+  }
   argv[n] = strdup (p);
 
   if (0)
-    {
+  {
 
-      MSG ("command:%s\n", str);
-      for (n = 0; argv[n] != NULL; n++)
-        MSG ("  argv[%d]:%s\n", n, argv[n]);
-    }
+    MSG ("command:%s\n", str);
+    for (n = 0; argv[n] != NULL; n++)
+      MSG ("  argv[%d]:%s\n", n, argv[n]);
+  }
 
   return argv;
 }
@@ -366,7 +379,7 @@ make_command_argv (const char *str)
 static void
 spawn_task (Task *task)
 {
-  if (0) MSG ("spawn program '%s'...\n", task->id);
+  if (1) MSG ("spawn program '%s'...\n", task->id);
 
   if (task->piped && task->pipe_id[0] == '\0')  // task, who are piped, makes pipe file a and b
   {
@@ -432,11 +445,12 @@ spawn_task (Task *task)
     if (sigprocmask(SIG_UNBLOCK, &mask, NULL) == -1)
       MSG (" ---- \n ");
 
+
+    MSG ("child start [%s] pid: %d\n", task->id, task->pid);
     execvp (argv[0], argv);
     MSG ("failed to execute command '%s': %s\n", task->command, STRERROR);
     exit (-1);
   }
-  MSG ("child start [%s] pid: %d\n", task->id, task->pid);
 }
 
 static void
@@ -454,17 +468,17 @@ wait_for_children (int signo)
   Task *task;
   pid_t pid;
 
- rewait:
+rewait:
   pid = waitpid (-1, NULL, WNOHANG);
   if (pid <= 0)
     return;
 
   task = lookup_task_by_pid (pid);
   if (!task)
-    {
-      MSG ("unknown pid %d", pid);
-      return;
-    }
+  {
+    MSG ("unknown pid %d", pid);
+    return;
+  }
 
   if (0) MSG ("program[%s] terminated\n", task->id);
 
@@ -488,41 +502,41 @@ terminate_children (int signo)
 
   for (task = tasks; task != NULL; task = task->next)
     if (task->pid > 0)
-      {
-        if (1) MSG ("kill program[%s] pid[%d] by SIGNAL(%d)\n", task->id, task->pid, signo);
-        int res = kill (task->pid, signo);
-        if (res == EINVAL) {
-          MSG ("kill pid[%d] error EINVAL", task->pid);
-        } else if (res == EPERM) {
-          MSG ("kill pid[%d] error EPERM", task->pid);
-        } else if (res == ESRCH) {
-          MSG ("kill pid[%d] error ESRCH", task->pid);
-        } else if (res == 0) {
-          MSG ("no error\n");
-        }
+    {
+      if (1) MSG ("kill program[%s] pid[%d] by SIGNAL(%d)\n", task->id, task->pid, signo);
+      int res = kill (task->pid, signo);
+      if (res == EINVAL) {
+        MSG ("kill pid[%d] error EINVAL", task->pid);
+      } else if (res == EPERM) {
+        MSG ("kill pid[%d] error EPERM", task->pid);
+      } else if (res == ESRCH) {
+        MSG ("kill pid[%d] error ESRCH", task->pid);
+      } else if (res == 0) {
+        MSG ("no error\n");
       }
+    }
 
   exit (1);
 }
 
 int
 main (int    argc,
-      char **argv)
+    char **argv)
 {
   //struct sigaction sa;
   int terminated;
 
   if (argc <= 1)
-    {
-      MSG ("usage: %s config-file\n", argv[0]);
-      return -1;
-    }
+  {
+    MSG ("usage: %s config-file\n", argv[0]);
+    return -1;
+  }
 
   if (read_config (argv[1]))
-    {
-      MSG ("failed to load config file '%s': %s\n", argv[1], STRERROR);
-      return -1;
-    }
+  {
+    MSG ("failed to load config file '%s': %s\n", argv[1], STRERROR);
+    return -1;
+  }
 
   running = 1;
   /*
@@ -532,24 +546,24 @@ main (int    argc,
   sa.sa_flags = 0;
   sa.sa_handler = wait_for_children; // handler를 새롭게 세팅함.
   if (sigaction (SIGCHLD, &sa, NULL))
-    MSG ("failed to register signal handler for SIGINT\n");
+  MSG ("failed to register signal handler for SIGINT\n");
 
   // SIGINT //
   sigemptyset (&sa.sa_mask);
   sa.sa_flags = 0;
   sa.sa_handler = terminate_children;
   if (sigaction (SIGINT, &sa, NULL))
-    MSG ("failed to register signal handler for SIGINT\n");
+  MSG ("failed to register signal handler for SIGINT\n");
 
   // SIGTERM //
   sigemptyset (&sa.sa_mask);
   sa.sa_flags = 0;
   sa.sa_handler = terminate_children;
   if (sigaction (SIGTERM, &sa, NULL))
-    MSG ("failed to register signal handler for SIGINT\n");
+  MSG ("failed to register signal handler for SIGINT\n");
 
   spawn_tasks ();
-  */
+   */
 
   //spawn_tasks();
 
@@ -569,41 +583,41 @@ main (int    argc,
   sfd = signalfd(-1, &mask, SFD_CLOEXEC);
   if (sfd == -1)
     MSG ("signalfd\n");
-    
+
 
   spawn_tasks();
 
   terminated = 0;
   while (!terminated)
-    {
-      s = read(sfd, &fdsi, sizeof(struct signalfd_siginfo));
+  {
+    s = read(sfd, &fdsi, sizeof(struct signalfd_siginfo));
 
-      if (s != sizeof(struct signalfd_siginfo))
-        MSG ("read\n");
+    if (s != sizeof(struct signalfd_siginfo))
+      MSG ("read\n");
 
-      if (fdsi.ssi_signo == SIGCHLD) {
-        wait_for_children(SIGCHLD);
-      } else if (fdsi.ssi_signo == SIGINT) {
-        terminate_children(SIGINT);
-      } else if (fdsi.ssi_signo == SIGTERM) {
-        terminate_children(SIGTERM);
-      } else {
-        MSG ("read unexpected signal\n");
+    if (fdsi.ssi_signo == SIGCHLD) {
+      wait_for_children(SIGCHLD);
+    } else if (fdsi.ssi_signo == SIGINT) {
+      terminate_children(SIGINT);
+    } else if (fdsi.ssi_signo == SIGTERM) {
+      terminate_children(SIGTERM);
+    } else {
+      MSG ("read unexpected signal\n");
+    }
+
+    Task *task;
+
+    terminated = 1;
+    for (task = tasks; task != NULL; task = task->next)
+      if (task->pid > 0)
+      {
+        terminated = 0;
+        break;
       }
 
-      Task *task;
+    usleep (100000);
 
-      terminated = 1;
-      for (task = tasks; task != NULL; task = task->next)
-        if (task->pid > 0)
-          {
-            terminated = 0;
-            break;
-          }
+  }
 
-      usleep (100000);
-      
-    }
-  
   return 0;
 }
