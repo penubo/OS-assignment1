@@ -31,24 +31,24 @@ typedef enum
 typedef struct _Task Task;
 struct _Task
 {
-  Task          *next;
+  Task          *next;                  // pointer to the next task
 
-  volatile pid_t pid;
-  int            piped;                 // is this boolean value?? 
-  int            pipe_a[2];             // what is pipe_a and _b
-  int            pipe_b[2];
+  volatile pid_t pid;                   // pid of the task
+  int            piped;                 // 1 if it's piped 0 if it's not
+  int            pipe_a[2];             // pipe file descriptor A
+  int            pipe_b[2];             // pipe file descriptor B
 
-  char           id[ID_MAX + 1];
-  unsigned int   order;                 // order of task.
-  char           pipe_id[ID_MAX + 1];
-  Action         action;                // action: once or respawn
-  char           command[COMMAND_LEN];
+  char           id[ID_MAX + 1];        // identifier of the task
+  unsigned int   order;                 // [new] order of the task
+  char           pipe_id[ID_MAX + 1];   // id of a task which is piped with
+  Action         action;                // action of the task (once or respawn)
+  char           command[COMMAND_LEN];  // command of the task
 };
 
-static Task *tasks;
+static Task *tasks;                     // list of tasks
 
-static sigset_t mask;
-static int sfd;
+static sigset_t mask;                   // [new] mask for signalfd()
+static int sfd;                         // [new] signal file descriptor from signalfd()
 static volatile int running;
 
 static char *
@@ -65,8 +65,7 @@ strstrip (char *str)
     str[len] = '\0';
   }
 
-  for (start = str; *start && isspace (*start); start++)
-    ;
+  for (start = str; *start && isspace (*start); start++);
   memmove (str, start, strlen (start) + 1);
 
   return str;
@@ -89,6 +88,7 @@ check_valid_id (const char *str)
   return 0;
 }
 
+/* [new] for checking order */
 static int
 check_valid_order (const char *str)
 {
@@ -96,10 +96,10 @@ check_valid_order (const char *str)
   int    i;
 
   len = strlen (str);
-  if (len < ORDER_MIN || ORDER_MAX < len)
+  if (len < ORDER_MIN || ORDER_MAX < len)   // checking length of order
     return -1;
 
-  for (i = 0; i < len; i++) 
+  for (i = 0; i < len; i++)                 // assure only valid is number
     if ( !isdigit (str[i]) )
       return -1;
 
@@ -149,16 +149,17 @@ append_task (Task *task)
     tasks = new_task;
   else
   {
+    /* [new] appending task by the order */
     Task *t = tasks;
 
-    if (new_task->order == -1) {
+    if (new_task->order == -1) {                    // if order is -1 then just add the task
       for ( ; t->next != NULL; t = t->next) ;
       t->next = new_task;
     } else {
 
-      if (t->order > new_task->order) {
-        new_task->next = t;
-        tasks = new_task;
+      if (t->order > new_task->order) {             // find the task which is greater than 
+        new_task->next = t;                         // currently added task
+        tasks = new_task;                           // then insert in the linked list
       } else {
         while (t->next != NULL && t->next->order < new_task->order) t = t->next;
         new_task->next = t->next;
@@ -241,7 +242,7 @@ read_config (const char *filename)
       continue;
     }
 
-    /* order */
+    /* [new] order */
     s = p + 1;
     p = strchr (s, ':');
     if (!p)
@@ -441,7 +442,7 @@ spawn_task (Task *task)
       }
     }
 
-    if (sigprocmask(SIG_UNBLOCK, &mask, NULL) == -1) // unblock signals before executed.
+    if (sigprocmask(SIG_UNBLOCK, &mask, NULL) == -1) // [new] unblock signals before executed.
       MSG (" sigprocmask \n ");
 
     execvp (argv[0], argv);
@@ -531,30 +532,32 @@ main (int    argc,
 
   running = 1;
 
-  sigemptyset(&mask);
-  sigaddset(&mask, SIGCHLD);
+  /* [new] get signal file descriptor from signalfd() */
+
+  sigemptyset(&mask);                                     // making a mask for signalfd()
+  sigaddset(&mask, SIGCHLD);                              // caller wish to accept these signals
   sigaddset(&mask, SIGINT);
   sigaddset(&mask, SIGTERM);
 
-  if (sigprocmask(SIG_BLOCK, &mask, NULL) == -1)
-    MSG ("sigprocmask\n");
+  if (sigprocmask(SIG_BLOCK, &mask, NULL) == -1)          // block signals to prevent
+    MSG ("sigprocmask\n");                                // being handled by default action
 
-  sfd = signalfd(-1, &mask, SFD_CLOEXEC);
+  sfd = signalfd(-1, &mask, SFD_CLOEXEC);                 // get signal file descriptor
   if (sfd == -1)
     MSG ("signalfd\n");
-
 
   spawn_tasks();
 
   terminated = 0;
   while (!terminated)
   {
-    s = read(sfd, &fdsi, sizeof(struct signalfd_siginfo));
+    /* [new] read signal & handle by user defined handler */
+    s = read(sfd, &fdsi, sizeof(struct signalfd_siginfo));  // read signal from sfd
 
     if (s != sizeof(struct signalfd_siginfo))
       MSG ("read\n");
 
-    if (fdsi.ssi_signo == SIGCHLD) {
+    if (fdsi.ssi_signo == SIGCHLD) {                        
       wait_for_children(SIGCHLD);
     } else if (fdsi.ssi_signo == SIGINT) {
       terminate_children(SIGINT);
