@@ -5,6 +5,6 @@
 # normal tasks
 id1:once:::./task -n Task1 -w Hi -t 1
 id2:once::id1:./task -n Task2 -w Hello -r -t 1
-respawn1 : respawn : : : ./task -n Task3 -t 4
+#respawn1 : respawn : : : ./task -n Task3 -t 4
 idonce1:once:::./task -n Task4 -t 1
 idonce2:once:::./task -n Task5 -t 10
