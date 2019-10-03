@@ -156,19 +156,13 @@ append_task (Task *task)
     /* [new] appending task by the order */
     Task *t = tasks;
 
-    if (new_task->order == -1) {                    // if order is -1 then just add the task
-      for ( ; t->next != NULL; t = t->next) ;
-      t->next = new_task;
+    if (t->order > new_task->order) {             // find the task which is greater than 
+      new_task->next = t;                         // currently added task
+      tasks = new_task;                           // then insert in the linked list
     } else {
-
-      if (t->order > new_task->order) {             // find the task which is greater than 
-        new_task->next = t;                         // currently added task
-        tasks = new_task;                           // then insert in the linked list
-      } else {
-        while (t->next != NULL && t->next->order < new_task->order) t = t->next;
-        new_task->next = t->next;
-        t->next = new_task;
-      }
+      while (t->next != NULL && t->next->order < new_task->order) t = t->next;
+      new_task->next = t->next;
+      t->next = new_task;
     }
   }
 }
