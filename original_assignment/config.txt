@@ -3,13 +3,13 @@
 #
 
 # normal tasks
-notcmd:once::./TTT
-id1:once::./task -n Task1 -w Hi -r -t 1
-id2:wait:id1:./task -n Task2 -w Hello -r -t 1
-idwait1:wait::./task -n Task3 -t 2
-respawn1 : respawn : : ./task -n Task4 -t 4
-idonce1:once::./task -n Task5 -t 1
-idonce2:once::./task -n Task6 -t 2
+notcmd:once:::./TTT
+id1:once:4::./task -n Task1 -w Hi -r -t 1
+id2:once:3:id1:./task -n Task2 -w Hello -r -t 1
+idwait1:wait:::./task -n Task3 -t 2
+respawn1 : respawn :: : ./task -n Task4 -t 4
+idonce1:once:::./task -n Task5 -t 1
+idonce2:once:::./task -n Task6 -t 2
 
 # invalid format
 i love you

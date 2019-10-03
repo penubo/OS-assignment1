@@ -10,8 +10,6 @@
 #include <ctype.h>
 #include <errno.h>
 #include <sys/wait.h>
-#include <time.h> //execute randomly
-#include <sys/signalfd.h> //signalfd
 
 #define MSG(x...) fprintf (stderr, x)
 #define STRERROR  strerror (errno)
@@ -36,7 +34,7 @@ struct _Task
   int            piped;
   int            pipe_a[2];
   int            pipe_b[2];
-  int          order;   //add order category
+
   char           id[ID_MAX + 1];
   char           pipe_id[ID_MAX + 1];
   Action         action;
@@ -46,10 +44,9 @@ struct _Task
 static Task *tasks;
 
 static volatile int running;
-static sigset_t mask; //put signal in mask
 
 static char *
-strstrip (char *str) //remove the blanks 
+strstrip (char *str)
 {
   char  *start;
   size_t len;
@@ -111,7 +108,7 @@ lookup_task_by_pid (pid_t pid)
 }
 
 static void
-append_task (Task *task) //4자리 이하면을 여기서 처리해주나?
+append_task (Task *task)
 {
   Task *new_task;
 
@@ -208,30 +205,6 @@ read_config (const char *filename)
           MSG ("invalid action '%s' in line %d, ignored\n", s, line_nr);
           continue;
         }
-
-     /* order */ //프로그램 실행 순서, 4 자리 이하 숫자로 구성되면 중복시 상위 행에 기술된 프로그램이 우선
-     s = p + 1;
-     p = strchr(s, ':');
-     if (!p)
-        goto invalid_line;
-     *p = '\0';
-     strstrip(s);
-     if (s[0] != '\0') { //if it is empty
-        srand(time(NULL));
-        task.order = (rand() % 99999) + 1; //execute randomly
-     }
-     else {
-        int s_len = strlen(s);
-        if (s_len > 4) { //string length check
-           MSG("invalid string length '%s' in line %d, ignored\n", s, line_nr);
-           continue;
-        }
-        for (int i = 0; i < s_len; i++) { //character check
-           if ('0' > s[i] || s[i] > '9')
-              MSG("invalid character '%s' in line %d, ignored\n", s, line_nr);
-        }
-        
-     }
 
       /* pipe-id */
       s = p + 1;
@@ -413,8 +386,6 @@ spawn_task (Task *task)
             }
         }
 
-     sigprocmask(SIG_UNBLOCK, &mask, NULL); //signal unblock
-
       execvp (argv[0], argv);
       MSG ("failed to execute command '%s': %s\n", task->command, STRERROR);
       exit (-1);
@@ -431,7 +402,7 @@ spawn_tasks (void)
 }
 
 static void
-wait_for_children (int signo) //handler
+wait_for_children (int signo)
 {
   Task *task;
   pid_t pid;
@@ -460,7 +431,7 @@ wait_for_children (int signo) //handler
 }
 
 static void
-terminate_children (int signo) //handler
+terminate_children (int signo)
 {
   Task *task;
 
@@ -483,10 +454,7 @@ main (int    argc,
       char **argv)
 {
   struct sigaction sa;
-  struct signalfd_siginfo si;
   int terminated;
-  int fd;
-  ssize_t s;
 
   if (argc <= 1)
     {
@@ -502,65 +470,33 @@ main (int    argc,
 
   running = 1;
 
-  sigemptyset(&mask);
-  sigaddset(&mask, SIGCHLD);
-  sigaddset(&mask, SIGINT);
-  sigaddset(&mask, SIGTERM);
-
-  if (sigprocmask(SIG_BLOCK, &mask, NULL) == -1) { //signal block setting
-     MSG("< sigprocmask error >\n");
-     return -1;
-  }
-
-  fd = signalfd(-1, &mask, 0); //get signal file descriptor
-  if (fd == -1) {
-     MSG("< signalfd error >\n");
-     return -1;
-  }
-
-  /* sigaction part
-  // SIGCHLD
+  /* SIGCHLD */
   sigemptyset (&sa.sa_mask);
   sa.sa_flags = 0;
   sa.sa_handler = wait_for_children;
   if (sigaction (SIGCHLD, &sa, NULL))
-   MSG ("failed to register signal handler for SIGINT\n");
+    MSG ("failed to register signal handler for SIGINT\n");
 
-  // SIGINT
+  /* SIGINT */
   sigemptyset (&sa.sa_mask);
   sa.sa_flags = 0;
   sa.sa_handler = terminate_children;
   if (sigaction (SIGINT, &sa, NULL))
-   MSG ("failed to register signal handler for SIGINT\n");
+    MSG ("failed to register signal handler for SIGINT\n");
 
-  // SIGTERM
+  /* SIGTERM */
   sigemptyset (&sa.sa_mask);
   sa.sa_flags = 0;
   sa.sa_handler = terminate_children;
   if (sigaction (SIGTERM, &sa, NULL))
-   MSG ("failed to register signal handler for SIGINT\n");
-  */
-  
+    MSG ("failed to register signal handler for SIGINT\n");
+
   spawn_tasks ();
 
   terminated = 0;
   while (!terminated)
     {
       Task *task;
-
-     s = read(fd, &si, sizeof(struct signalfd_siginfo)); //read signal through file descriptor
-     if (s != sizeof(struct signalfd_siginfo)) {
-        MSG("< read error >\n");
-        return -1;
-     }
-     //signal comparison and handler execution
-     if (si.ssi_signo == SIGCHLD)
-        wait_for_children(SIGCHLD);
-     else if (si.ssi_signo == SIGINT)
-        terminate_children(SIGINT);
-     else if (si.ssi_signo == SIGTERM)
-        terminate_children(SIGTERM);
-
 
       terminated = 1;
       for (task = tasks; task != NULL; task = task->next)
@@ -572,6 +508,6 @@ main (int    argc,
 
       usleep (100000);
     }
-  //fd close 해줘야되나?
+  
   return 0;
 }

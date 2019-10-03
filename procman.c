@@ -7,10 +7,11 @@
 #include <stdio.h>
 #include <string.h>
 #include <signal.h>
-#include <sys/signalfd.h>
+#include <sys/signalfd.h>             // [new] for signalfd
 #include <ctype.h>
 #include <errno.h>
 #include <sys/wait.h>
+#include <time.h>                     // [new] for rand() function
 
 #define MSG(x...) fprintf (stderr, x)
 #define STRERROR  strerror (errno)
@@ -20,6 +21,8 @@
 #define ORDER_MIN 1
 #define ORDER_MAX 4
 #define COMMAND_LEN 256
+
+
 
 typedef enum
 {
@@ -50,6 +53,7 @@ static Task *tasks;                     // list of tasks
 static sigset_t mask;                   // [new] mask for signalfd()
 static int sfd;                         // [new] signal file descriptor from signalfd()
 static volatile int running;
+
 
 static char *
 strstrip (char *str)
@@ -259,7 +263,7 @@ read_config (const char *filename)
     } 
     else                           // when no order was given
     {                              
-      task.order = -1;             // task order -1 means just append no matter what
+      task.order = rand() % 10000; // give random task order
     }
 
     /* pipe-id */
@@ -506,6 +510,8 @@ terminate_children (int signo)
       kill (task->pid, signo);
     }
 
+  close(sfd); // [new] close signal file descriptor before terminate procman process
+
   exit (1);
 }
 
@@ -517,6 +523,8 @@ main (int    argc,
   struct signalfd_siginfo fdsi;
   ssize_t s;
   Task *task;
+
+  srand(time(NULL));     // [new] make random seed
 
   if (argc <= 1)
   {
