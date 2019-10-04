@@ -3,7 +3,7 @@
 #
 
 # normal tasks
-id1:once:4::./task -n Task1 -w Hi -t 1
+id1:once:4::./task -n Task1 -w Hi -t 2
 id2:once:5:id1:./task -n Task2 -w Hello -r -t 1
 respawn1 : respawn :3 : : ./task -n Task3 -t 4
 idonce1:once:2::./task -n Task4 -t 1
